@@ -8,7 +8,7 @@ expense-tracker/
 │       ├── 01-database-setup.md   ← complete
 │       ├── 02-registration.md     ← complete
 │       ├── 03-login_logout.md     ← complete
-│       └── 04-profile.md         ← complete
+│       └── 04-profile.md          ← complete
 ├── database/
 │   ├── __init__.py
 │   └── db.py                      ← get_db(), init_db(), seed_db(), create_user(),
