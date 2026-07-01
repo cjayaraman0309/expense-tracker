@@ -1,6 +1,15 @@
-from flask import Flask, render_template
+import sqlite3
+from flask import Flask, render_template, flash, redirect, url_for, request, abort, session
+from werkzeug.security import check_password_hash
+from database.db import get_db, init_db, seed_db, create_user, get_user_by_email
+from database.queries import get_user_by_id, get_summary_stats, get_recent_transactions, get_category_breakdown
 
 app = Flask(__name__)
+app.secret_key = "spendly-dev-secret-key"
+
+with app.app_context():
+    init_db()
+    seed_db()
 
 
 # ------------------------------------------------------------------ #
@@ -12,14 +21,52 @@ def landing():
     return render_template("landing.html")
 
 
-@app.route("/register")
+@app.route("/register", methods=["GET", "POST"])
 def register():
-    return render_template("register.html")
+    if request.method == "GET":
+        return render_template("register.html")
+    if request.method != "POST":
+        abort(405)
+
+    name = request.form.get("name", "").strip()
+    email = request.form.get("email", "").strip()
+    password = request.form.get("password", "")
+    confirm_password = request.form.get("confirm_password", "")
+
+    if not all([name, email, password, confirm_password]):
+        flash("All fields are required.")
+        return render_template("register.html")
+
+    if password != confirm_password:
+        flash("Passwords do not match.")
+        return render_template("register.html")
+
+    try:
+        create_user(name, email, password)
+    except sqlite3.IntegrityError:
+        flash("Email already registered.")
+        return render_template("register.html")
+
+    flash("Account created! Please sign in.")
+    return redirect(url_for("login"))
 
 
-@app.route("/login")
+@app.route("/login", methods=["GET", "POST"])
 def login():
-    return render_template("login.html")
+    if request.method == "GET":
+        return render_template("login.html")
+
+    email = request.form.get("email", "").strip()
+    password = request.form.get("password", "")
+
+    user = get_user_by_email(email)
+    if not user or not check_password_hash(user["password_hash"], password):
+        flash("Invalid email or password.")
+        return render_template("login.html")
+
+    session["user_id"] = user["id"]
+    session["user_name"] = user["name"]
+    return redirect(url_for("landing"))
 
 
 # ------------------------------------------------------------------ #
@@ -28,12 +75,22 @@ def login():
 
 @app.route("/logout")
 def logout():
-    return "Logout — coming in Step 3"
+    session.clear()
+    return redirect(url_for("landing"))
 
 
 @app.route("/profile")
 def profile():
-    return "Profile page — coming in Step 4"
+    if not session.get("user_id"):
+        return redirect(url_for("login"))
+
+    user_id    = session["user_id"]
+    user       = get_user_by_id(user_id)
+    stats      = get_summary_stats(user_id)
+    expenses   = get_recent_transactions(user_id)
+    categories = get_category_breakdown(user_id)
+
+    return render_template("profile.html", user=user, stats=stats, expenses=expenses, categories=categories)
 
 
 @app.route("/expenses/add")
